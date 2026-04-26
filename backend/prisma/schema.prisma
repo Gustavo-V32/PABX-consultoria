@@ -1,0 +1,1218 @@
+// ============================================================
+// OmniSuite - Prisma Schema
+// ============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  AGENT
+  TELEPHONY_OPERATOR
+  ANALYST
+  VIEWER
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+  AWAY
+  IN_CALL
+  PAUSED
+  WRAP_UP
+}
+
+enum ConversationStatus {
+  WAITING
+  IN_PROGRESS
+  PENDING
+  RESOLVED
+  CLOSED
+  TRANSFERRED
+}
+
+enum ConversationChannel {
+  WHATSAPP
+  INTERNAL_CHAT
+  EMAIL
+  VOICE
+  SMS
+  WEBCHAT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+  TEMPLATE
+  INTERACTIVE
+  SYSTEM
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum TemplateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+enum TemplateCategory {
+  AUTHENTICATION
+  MARKETING
+  UTILITY
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  MISSED
+  FAILED
+  TRANSFERRED
+  VOICEMAIL
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+  INTERNAL
+}
+
+enum QueueStrategy {
+  RING_ALL
+  ROUND_ROBIN
+  LEAST_RECENT
+  FEWEST_CALLS
+  RANDOM
+  WEIGHTED_RANDOM
+  RRMEMORY
+  LINEAR
+}
+
+enum AutomationTrigger {
+  MESSAGE_RECEIVED
+  CONVERSATION_OPENED
+  CONVERSATION_CLOSED
+  KEYWORD_MATCH
+  SCHEDULE
+  WEBHOOK
+  CONTACT_CREATED
+  QUEUE_JOIN
+  WAIT_TIMEOUT
+}
+
+enum AutomationActionType {
+  SEND_MESSAGE
+  SEND_TEMPLATE
+  ASSIGN_AGENT
+  ASSIGN_QUEUE
+  ADD_TAG
+  REMOVE_TAG
+  CLOSE_CONVERSATION
+  TRANSFER_CONVERSATION
+  WEBHOOK_CALL
+  SET_VARIABLE
+  WAIT
+  CONDITION
+}
+
+enum NumberStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+  PENDING_REVIEW
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  ACCESS
+  TRANSFER
+  ASSIGN
+  CLOSE
+  REOPEN
+  EXPORT
+}
+
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum FlowNodeType {
+  START
+  MESSAGE
+  QUESTION
+  CONDITION
+  NUMERIC_MENU
+  CAPTURE_TEXT
+  CAPTURE_NUMBER
+  CAPTURE_DOCUMENT
+  WAIT
+  WEBHOOK
+  SEND_TEMPLATE
+  SET_VARIABLE
+  TRANSFER_QUEUE
+  TRANSFER_AGENT
+  END
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+enum IntegrationLogStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  RETRYING
+}
+
+enum DigitalNumberStatus {
+  REGISTERED
+  UNREGISTERED
+  UNREACHABLE
+  DISABLED
+  TESTING
+}
+
+enum CallRouteDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallRouteDestinationType {
+  QUEUE
+  EXTENSION
+  IVR
+  RING_GROUP
+  EXTERNAL_NUMBER
+  HANGUP
+}
+
+enum SoftphoneSessionStatus {
+  REGISTERED
+  UNREGISTERED
+  IN_CALL
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+model Organization {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  logo        String?
+  timezone    String    @default("America/Sao_Paulo")
+  locale      String    @default("pt-BR")
+  settings    Json      @default("{}")
+  plan        String    @default("basic")
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  users               User[]
+  whatsappNumbers     WhatsappNumber[]
+  contacts            Contact[]
+  contactAttachments  ContactAttachment[]
+  conversations       Conversation[]
+  templates           Template[]
+  queues              Queue[]
+  extensions          Extension[]
+  trunks              SipTrunk[]
+  automations         Automation[]
+  tags                Tag[]
+  sectors             Sector[]
+  customFields        CustomField[]
+  ivrFlows            IvrFlow[]
+  integrations        Integration[]
+  integrationLogs     IntegrationLog[]
+  webhookLogs         WebhookLog[]
+  communicationFlows  CommunicationFlow[]
+  customerVariables   CustomerVariable[]
+  googleDriveFiles    GoogleDriveFile[]
+  digitalNumbers      DigitalNumber[]
+  callRoutes          CallRoute[]
+  ringGroups          RingGroup[]
+  callRecordings      CallRecording[]
+  softphoneSessions   SoftphoneSession[]
+  agentStatusLogs     AgentStatusLog[]
+  auditLogs           AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id              String      @id @default(uuid())
+  organizationId  String
+  name            String
+  email           String
+  password        String
+  avatar          String?
+  role            UserRole    @default(AGENT)
+  status          UserStatus  @default(OFFLINE)
+  statusMessage   String?
+  extensionId     String?     @unique
+  maxChats        Int         @default(5)
+  isActive        Boolean     @default(true)
+  lastSeenAt      DateTime?
+  fcmToken        String?
+  settings        Json        @default("{}")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  extension       Extension?    @relation(fields: [extensionId], references: [id])
+
+  assignedConversations   Conversation[]    @relation("AssignedAgent")
+  sentMessages            Message[]         @relation("SentBy")
+  responsibleContacts     Contact[]         @relation("ResponsibleContacts")
+  uploadedContactAttachments ContactAttachment[] @relation("ContactAttachmentUploadedBy")
+  uploadedDriveFiles      GoogleDriveFile[] @relation("DriveFileUploadedBy")
+  queueMemberships        QueueMember[]
+  transfersFrom           ConversationTransfer[] @relation("TransferFrom")
+  transfersTo             ConversationTransfer[] @relation("TransferTo")
+  callsHandled            Call[]
+  softphoneSessions       SoftphoneSession[]
+  statusLogs              AgentStatusLog[]
+  auditLogs               AuditLog[]
+  notifications           Notification[]
+  refreshTokens           RefreshToken[]
+  supervisorSectors       Sector[]          @relation("SectorSupervisor")
+
+  @@unique([organizationId, email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String
+  token       String    @unique
+  expiresAt   DateTime
+  isRevoked   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  ipAddress   String?
+  userAgent   String?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Sector {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  color           String    @default("#6366f1")
+  description     String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  supervisors     User[]        @relation("SectorSupervisor")
+  conversations   Conversation[]
+  queues          Queue[]
+
+  @@unique([organizationId, name])
+  @@map("sectors")
+}
+
+model Tag {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  color           String    @default("#6366f1")
+  createdAt       DateTime  @default(now())
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  conversations   ConversationTag[]
+  contacts        ContactTag[]
+
+  @@unique([organizationId, name])
+  @@map("tags")
+}
+
+model Contact {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  phone           String?
+  email           String?
+  document        String?
+  company         String?
+  avatar          String?
+  whatsappId      String?
+  responsibleUserId String?
+  lifecycleStage  String    @default("lead")
+  leadSource      String?
+  isBlocked       Boolean   @default(false)
+  notes           String?
+  customFields    Json      @default("{}")
+  externalId      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  responsibleUser User?           @relation("ResponsibleContacts", fields: [responsibleUserId], references: [id])
+  conversations   Conversation[]
+  tags            ContactTag[]
+  variables       CustomerVariable[]
+  attachments     ContactAttachment[]
+  driveFiles      GoogleDriveFile[]
+  flowExecutions  FlowExecution[]
+
+  @@unique([organizationId, whatsappId])
+  @@unique([organizationId, phone])
+  @@map("contacts")
+}
+
+model ContactAttachment {
+  id              String    @id @default(uuid())
+  organizationId  String
+  contactId       String
+  uploadedById    String?
+  name            String
+  mimeType        String?
+  size            Int?
+  url             String
+  storageProvider String   @default("local")
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  contact         Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  uploadedBy      User?        @relation("ContactAttachmentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@map("contact_attachments")
+}
+
+model ContactTag {
+  contactId   String
+  tagId       String
+  createdAt   DateTime  @default(now())
+
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tags")
+}
+
+model WhatsappNumber {
+  id              String        @id @default(uuid())
+  organizationId  String
+  name            String
+  phoneNumber     String
+  phoneNumberId   String        @unique
+  wabaId          String
+  accessToken     String
+  webhookToken    String?
+  status          NumberStatus  @default(ACTIVE)
+  qualityRating   String?
+  messagingLimit  Int?
+  settings        Json          @default("{}")
+  lastConnectedAt DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  conversations   Conversation[]
+  templates       Template[]
+
+  @@map("whatsapp_numbers")
+}
+
+model Template {
+  id              String            @id @default(uuid())
+  organizationId  String
+  whatsappNumberId String?
+  name            String
+  language        String            @default("pt_BR")
+  category        TemplateCategory
+  status          TemplateStatus    @default(PENDING)
+  metaTemplateId  String?
+  components      Json
+  variables       String[]          @default([])
+  rejectedReason  String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  whatsappNumber  WhatsappNumber?   @relation(fields: [whatsappNumberId], references: [id])
+  messages        Message[]
+
+  @@unique([organizationId, name, language])
+  @@map("templates")
+}
+
+model Conversation {
+  id              String                @id @default(uuid())
+  organizationId  String
+  contactId       String
+  assignedAgentId String?
+  whatsappNumberId String?
+  queueId         String?
+  sectorId        String?
+  channel         ConversationChannel
+  status          ConversationStatus    @default(WAITING)
+  subject         String?
+  priority        Int                   @default(0)
+  isBot           Boolean               @default(false)
+  botStep         String?
+  metadata        Json                  @default("{}")
+  customFields    Json                  @default("{}")
+  lastMessageAt   DateTime?
+  waitingSince    DateTime?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id])
+  contact         Contact               @relation(fields: [contactId], references: [id])
+  assignedAgent   User?                 @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
+  whatsappNumber  WhatsappNumber?       @relation(fields: [whatsappNumberId], references: [id])
+  queue           Queue?                @relation(fields: [queueId], references: [id])
+  sector          Sector?               @relation(fields: [sectorId], references: [id])
+
+  messages        Message[]
+  tags            ConversationTag[]
+  transfers       ConversationTransfer[]
+  notes           ConversationNote[]
+  driveFiles      GoogleDriveFile[]
+  flowExecutions  FlowExecution[]
+
+  @@map("conversations")
+}
+
+model ConversationTag {
+  conversationId  String
+  tagId           String
+  createdAt       DateTime  @default(now())
+
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag             Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+  @@map("conversation_tags")
+}
+
+model ConversationTransfer {
+  id              String    @id @default(uuid())
+  conversationId  String
+  fromAgentId     String?
+  toAgentId       String?
+  fromQueueId     String?
+  toQueueId       String?
+  reason          String?
+  createdAt       DateTime  @default(now())
+
+  conversation    Conversation  @relation(fields: [conversationId], references: [id])
+  fromAgent       User?         @relation("TransferFrom", fields: [fromAgentId], references: [id])
+  toAgent         User?         @relation("TransferTo", fields: [toAgentId], references: [id])
+  fromQueue       Queue?        @relation("QueueTransferFrom", fields: [fromQueueId], references: [id])
+  toQueue         Queue?        @relation("QueueTransferTo", fields: [toQueueId], references: [id])
+
+  @@map("conversation_transfers")
+}
+
+model ConversationNote {
+  id              String    @id @default(uuid())
+  conversationId  String
+  content         String
+  authorId        String
+  isPrivate       Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  conversation    Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_notes")
+}
+
+model Message {
+  id                String          @id @default(uuid())
+  conversationId    String
+  senderId          String?
+  templateId        String?
+  externalId        String?
+  type              MessageType     @default(TEXT)
+  direction         MessageDirection @default(INBOUND)
+  status            MessageStatus   @default(PENDING)
+  content           String?
+  mediaUrl          String?
+  mediaType         String?
+  mediaSize         Int?
+  mediaCaption      String?
+  templateVariables Json?
+  metadata          Json            @default("{}")
+  isDeleted         Boolean         @default(false)
+  errorMessage      String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  conversation    Conversation    @relation(fields: [conversationId], references: [id])
+  sender          User?           @relation("SentBy", fields: [senderId], references: [id])
+  template        Template?       @relation(fields: [templateId], references: [id])
+  attachments     MessageAttachment[]
+
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id              String    @id @default(uuid())
+  messageId       String
+  name            String
+  mimeType        String?
+  size            Int?
+  url             String
+  storageProvider String    @default("local")
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+
+  message         Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_attachments")
+}
+
+model Queue {
+  id              String          @id @default(uuid())
+  organizationId  String
+  sectorId        String?
+  name            String
+  description     String?
+  strategy        QueueStrategy   @default(ROUND_ROBIN)
+  maxWaitTime     Int             @default(300)
+  maxQueueSize    Int             @default(50)
+  greetingMessage String?
+  waitMessage     String?
+  wrapUpTime      Int             @default(5)
+  autoAssign      Boolean         @default(true)
+  isActive        Boolean         @default(true)
+  settings        Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  sector          Sector?         @relation(fields: [sectorId], references: [id])
+  members         QueueMember[]
+  conversations   Conversation[]
+  calls           Call[]
+  transfersFrom   ConversationTransfer[] @relation("QueueTransferFrom")
+  transfersTo     ConversationTransfer[] @relation("QueueTransferTo")
+
+  @@unique([organizationId, name])
+  @@map("queues")
+}
+
+model QueueMember {
+  id          String    @id @default(uuid())
+  queueId     String
+  userId      String
+  penalty     Int       @default(0)
+  isPaused    Boolean   @default(false)
+  pauseReason String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  queue       Queue     @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, userId])
+  @@map("queue_members")
+}
+
+model Extension {
+  id              String    @id @default(uuid())
+  organizationId  String
+  number          String
+  name            String
+  secret          String
+  context         String    @default("from-internal")
+  callerId        String?
+  maxContacts     Int       @default(1)
+  isActive        Boolean   @default(true)
+  settings        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  user            User?
+  softphoneSessions SoftphoneSession[]
+  ringGroupMembers RingGroupMember[]
+
+  @@unique([organizationId, number])
+  @@map("extensions")
+}
+
+model SipTrunk {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  provider        String
+  host            String
+  port            Int       @default(5060)
+  username        String?
+  secret          String?
+  fromUser        String?
+  fromDomain      String?
+  context         String    @default("from-trunk")
+  codecs          String[]  @default(["alaw", "ulaw"])
+  isActive        Boolean   @default(true)
+  settings        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  calls           Call[]
+  routes          CallRoute[]
+
+  @@unique([organizationId, name])
+  @@map("sip_trunks")
+}
+
+model Call {
+  id              String        @id @default(uuid())
+  organizationId  String?
+  agentId         String?
+  queueId         String?
+  trunkId         String?
+  uniqueId        String        @unique
+  linkedId        String?
+  channel         String?
+  callerIdNum     String?
+  callerIdName    String?
+  destinationNum  String?
+  direction       CallDirection
+  status          CallStatus    @default(RINGING)
+  startTime       DateTime      @default(now())
+  answerTime      DateTime?
+  endTime         DateTime?
+  duration        Int?
+  billableDuration Int?
+  holdTime        Int?
+  waitTime        Int?
+  recordingPath   String?
+  recordingUrl    String?
+  transferredTo   String?
+  hangupCause     String?
+  variables       Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  agent           User?         @relation(fields: [agentId], references: [id])
+  queue           Queue?        @relation(fields: [queueId], references: [id])
+  trunk           SipTrunk?     @relation(fields: [trunkId], references: [id])
+  recordings      CallRecording[]
+
+  @@map("calls")
+}
+
+model IvrFlow {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  nodes           Json
+  edges           Json
+  isActive        Boolean   @default(true)
+  entryPoint      String?
+  audioFile       String?
+  ttsText         String?
+  afterHoursMessage String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  options         IvrOption[]
+
+  @@map("ivr_flows")
+}
+
+model IvrOption {
+  id              String      @id @default(uuid())
+  ivrFlowId       String
+  digit           String
+  label           String
+  destinationType CallRouteDestinationType
+  destinationValue String?
+  schedule        Json        @default("{}")
+  isFallback      Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  ivrFlow         IvrFlow     @relation(fields: [ivrFlowId], references: [id], onDelete: Cascade)
+
+  @@unique([ivrFlowId, digit])
+  @@map("ivr_options")
+}
+
+model CommunicationFlow {
+  id              String      @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  channel         ConversationChannel?
+  status          FlowStatus  @default(DRAFT)
+  startNodeId     String?
+  isActive        Boolean     @default(true)
+  version         Int         @default(1)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  nodes           FlowNode[]
+  connections     FlowConnection[]
+  executions      FlowExecution[]
+  integrationLogs IntegrationLog[]
+
+  @@unique([organizationId, name, version])
+  @@map("communication_flows")
+}
+
+model FlowNode {
+  id              String        @id @default(uuid())
+  flowId          String
+  type            FlowNodeType
+  label           String
+  position        Json          @default("{}")
+  config          Json          @default("{}")
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  flow            CommunicationFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  outgoing        FlowConnection[]  @relation("FlowConnectionSource")
+  incoming        FlowConnection[]  @relation("FlowConnectionTarget")
+  executions      FlowExecution[]   @relation("CurrentFlowNode")
+
+  @@map("flow_nodes")
+}
+
+model FlowConnection {
+  id              String    @id @default(uuid())
+  flowId          String
+  sourceNodeId    String
+  targetNodeId    String
+  sourceHandle    String?
+  targetHandle    String?
+  condition       Json      @default("{}")
+  createdAt       DateTime  @default(now())
+
+  flow            CommunicationFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  sourceNode      FlowNode @relation("FlowConnectionSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode      FlowNode @relation("FlowConnectionTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@map("flow_connections")
+}
+
+model FlowExecution {
+  id              String    @id @default(uuid())
+  flowId          String
+  conversationId  String?
+  contactId       String?
+  currentNodeId   String?
+  status          String    @default("RUNNING")
+  variables       Json      @default("{}")
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  errorMessage    String?
+
+  flow            CommunicationFlow @relation(fields: [flowId], references: [id])
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+  contact         Contact? @relation(fields: [contactId], references: [id])
+  currentNode     FlowNode? @relation("CurrentFlowNode", fields: [currentNodeId], references: [id])
+  integrationLogs IntegrationLog[]
+
+  @@map("flow_executions")
+}
+
+model CustomerVariable {
+  id              String    @id @default(uuid())
+  organizationId  String
+  contactId       String
+  key             String
+  value           String?
+  type            String    @default("string")
+  isSystem        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  contact         Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, key])
+  @@map("customer_variables")
+}
+
+model Automation {
+  id              String                @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  trigger         AutomationTrigger
+  triggerConfig   Json                  @default("{}")
+  conditions      Json                  @default("[]")
+  actions         Json
+  isActive        Boolean               @default(true)
+  runCount        Int                   @default(0)
+  lastRunAt       DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id])
+
+  @@map("automations")
+}
+
+model CustomField {
+  id              String    @id @default(uuid())
+  organizationId  String
+  entity          String
+  name            String
+  key             String
+  type            String
+  options         Json?
+  isRequired      Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, entity, key])
+  @@map("custom_fields")
+}
+
+model Integration {
+  id              String    @id @default(uuid())
+  organizationId  String
+  type            String
+  name            String
+  config          Json
+  isActive        Boolean   @default(true)
+  lastSyncAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  driveFiles      GoogleDriveFile[]
+  logs            IntegrationLog[]
+  webhookLogs     WebhookLog[]
+
+  @@unique([organizationId, type])
+  @@map("integrations")
+}
+
+model GoogleDriveFile {
+  id              String    @id @default(uuid())
+  organizationId  String
+  contactId       String?
+  conversationId  String?
+  uploadedById    String?
+  integrationId   String?
+  driveFileId     String
+  name            String
+  mimeType        String?
+  size            Int?
+  webViewLink     String?
+  webContentLink  String?
+  sharedLink      String?
+  folderPath      String?
+  permissions     Json      @default("{}")
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  contact         Contact?     @relation(fields: [contactId], references: [id])
+  conversation    Conversation? @relation(fields: [conversationId], references: [id])
+  uploadedBy      User?        @relation("DriveFileUploadedBy", fields: [uploadedById], references: [id])
+  integration     Integration? @relation(fields: [integrationId], references: [id])
+
+  @@unique([organizationId, driveFileId])
+  @@map("google_drive_files")
+}
+
+model IntegrationLog {
+  id              String    @id @default(uuid())
+  organizationId  String
+  integrationId   String?
+  flowId          String?
+  flowExecutionId String?
+  name            String?
+  method          HttpMethod
+  url             String
+  requestHeaders  Json      @default("{}")
+  requestBody     Json?
+  responseStatus  Int?
+  responseBody    Json?
+  status          IntegrationLogStatus @default(PENDING)
+  durationMs      Int?
+  errorMessage    String?
+  retryCount      Int       @default(0)
+  createdAt       DateTime  @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  integration     Integration? @relation(fields: [integrationId], references: [id])
+  flow            CommunicationFlow? @relation(fields: [flowId], references: [id])
+  flowExecution   FlowExecution? @relation(fields: [flowExecutionId], references: [id])
+
+  @@map("integration_logs")
+}
+
+model WebhookLog {
+  id              String    @id @default(uuid())
+  organizationId  String?
+  integrationId   String?
+  source          String
+  eventType       String?
+  headers         Json      @default("{}")
+  payload         Json
+  status          IntegrationLogStatus @default(SUCCESS)
+  processedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  integration     Integration?  @relation(fields: [integrationId], references: [id])
+
+  @@map("webhook_logs")
+}
+
+model DigitalNumber {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  operator        String?
+  sipServer       String?
+  username        String?
+  secret          String?
+  ip              String?
+  domain          String?
+  context         String    @default("from-trunk")
+  sipPort         Int       @default(5060)
+  udpPort         Int       @default(5060)
+  tlsPort         Int       @default(5061)
+  amiPort         Int       @default(5038)
+  rtpPortStart    Int       @default(10000)
+  rtpPortEnd      Int       @default(10200)
+  codecs          String[]  @default(["alaw", "ulaw"])
+  notes           String?
+  status          DigitalNumberStatus @default(UNREGISTERED)
+  registrationStatus String?
+  logs            Json      @default("[]")
+  lastTestAt      DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, name])
+  @@map("digital_numbers")
+}
+
+model CallRoute {
+  id              String    @id @default(uuid())
+  organizationId  String
+  trunkId         String?
+  direction       CallRouteDirection
+  name            String
+  pattern         String
+  destinationType CallRouteDestinationType
+  destinationValue String?
+  priority        Int       @default(1)
+  schedule        Json      @default("{}")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  trunk           SipTrunk? @relation(fields: [trunkId], references: [id])
+
+  @@unique([organizationId, direction, name])
+  @@map("call_routes")
+}
+
+model RingGroup {
+  id              String    @id @default(uuid())
+  organizationId  String
+  name            String
+  description     String?
+  strategy        QueueStrategy @default(RING_ALL)
+  timeout         Int       @default(30)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  members         RingGroupMember[]
+
+  @@unique([organizationId, name])
+  @@map("ring_groups")
+}
+
+model RingGroupMember {
+  id              String    @id @default(uuid())
+  ringGroupId     String
+  extensionId     String
+  order           Int       @default(0)
+  penalty         Int       @default(0)
+  createdAt       DateTime  @default(now())
+
+  ringGroup       RingGroup @relation(fields: [ringGroupId], references: [id], onDelete: Cascade)
+  extension       Extension @relation(fields: [extensionId], references: [id], onDelete: Cascade)
+
+  @@unique([ringGroupId, extensionId])
+  @@map("ring_group_members")
+}
+
+model CallRecording {
+  id              String    @id @default(uuid())
+  organizationId  String?
+  callId          String
+  storagePath     String
+  publicUrl       String?
+  duration        Int?
+  size            Int?
+  checksum        String?
+  createdAt       DateTime  @default(now())
+
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  call            Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_recordings")
+}
+
+model SoftphoneSession {
+  id              String    @id @default(uuid())
+  organizationId  String
+  userId          String
+  extensionId     String?
+  sessionId       String    @unique
+  userAgent       String?
+  ipAddress       String?
+  status          SoftphoneSessionStatus @default(REGISTERED)
+  registeredAt    DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  endedAt         DateTime?
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  extension       Extension? @relation(fields: [extensionId], references: [id])
+
+  @@map("softphone_sessions")
+}
+
+model AgentStatusLog {
+  id              String    @id @default(uuid())
+  organizationId  String
+  userId          String
+  fromStatus      UserStatus?
+  toStatus        UserStatus
+  reason          String?
+  createdAt       DateTime  @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("agent_status_logs")
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  body        String
+  type        String
+  data        Json      @default("{}")
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id              String      @id @default(uuid())
+  organizationId  String?
+  userId          String?
+  action          AuditAction
+  entity          String
+  entityId        String?
+  oldValues       Json?
+  newValues       Json?
+  ipAddress       String?
+  userAgent       String?
+  metadata        Json        @default("{}")
+  createdAt       DateTime    @default(now())
+
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
+  user            User?          @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model CannedResponse {
+  id              String    @id @default(uuid())
+  organizationId  String
+  title           String
+  shortcut        String
+  content         String
+  attachments     Json      @default("[]")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("canned_responses")
+}

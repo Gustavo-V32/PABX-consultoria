@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+logs
+uploads
+recordings
+.env
+.env.local
+npm-debug.log
