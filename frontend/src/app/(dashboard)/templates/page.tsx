@@ -15,6 +15,36 @@ export default function TemplatesPage() {
         { label: 'Categoria', path: 'category', type: 'badge' },
         { label: 'Status', path: 'status', type: 'badge' },
       ]}
+      fields={[
+        { name: 'name', label: 'Nome', required: true },
+        { name: 'language', label: 'Idioma', defaultValue: 'pt_BR' },
+        {
+          name: 'category',
+          label: 'Categoria',
+          type: 'select',
+          required: true,
+          defaultValue: 'UTILITY',
+          options: [
+            { label: 'Utilidade', value: 'UTILITY' },
+            { label: 'Marketing', value: 'MARKETING' },
+            { label: 'Autenticacao', value: 'AUTHENTICATION' },
+          ],
+        },
+        {
+          name: 'status',
+          label: 'Status',
+          type: 'select',
+          defaultValue: 'PENDING',
+          options: [
+            { label: 'Pendente', value: 'PENDING' },
+            { label: 'Aprovado', value: 'APPROVED' },
+            { label: 'Rejeitado', value: 'REJECTED' },
+            { label: 'Pausado', value: 'PAUSED' },
+          ],
+        },
+        { name: 'components', label: 'Componentes JSON', type: 'json', required: true, defaultValue: [] },
+        { name: 'variables', label: 'Variaveis JSON', type: 'json', defaultValue: [] },
+      ]}
     />
   );
 }

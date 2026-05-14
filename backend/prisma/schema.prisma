@@ -47,6 +47,7 @@ enum ConversationStatus {
 
 enum ConversationChannel {
   WHATSAPP
+  TELEGRAM
   INTERNAL_CHAT
   EMAIL
   VOICE

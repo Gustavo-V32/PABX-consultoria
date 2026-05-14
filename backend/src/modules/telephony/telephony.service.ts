@@ -14,6 +14,8 @@ export class TelephonyService implements OnModuleInit {
   private readonly logger = new Logger(TelephonyService.name);
   private amiClient: net.Socket | null = null;
   private amiConnected = false;
+  private amiConnecting = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
   private messageBuffer = '';
   private actionCallbacks = new Map<string, (response: any) => void>();
 
@@ -34,16 +36,22 @@ export class TelephonyService implements OnModuleInit {
   }
 
   private async connectAMI() {
+    if (this.amiConnected || this.amiConnecting) return;
+
     const host = this.config.get<string>('ASTERISK_HOST', 'asterisk');
     const port = this.config.get<number>('ASTERISK_AMI_PORT', 5038);
     const user = this.config.get<string>('ASTERISK_AMI_USER', 'omni_ami');
     const secret = this.config.get<string>('ASTERISK_AMI_SECRET', '');
 
     try {
+      this.amiConnecting = true;
+      this.clearReconnect();
+      this.amiClient?.destroy();
       this.amiClient = new net.Socket();
 
       this.amiClient.connect(port, host, () => {
         this.logger.log(`AMI connected to ${host}:${port}`);
+        this.amiConnecting = false;
       });
 
       this.amiClient.on('data', (data) => {
@@ -58,18 +66,35 @@ export class TelephonyService implements OnModuleInit {
       this.amiClient.on('error', (err) => {
         this.logger.error(`AMI error: ${err.message}`);
         this.amiConnected = false;
-        setTimeout(() => this.connectAMI(), 5000);
+        this.amiConnecting = false;
+        this.scheduleReconnect();
       });
 
       this.amiClient.on('close', () => {
         this.logger.warn('AMI connection closed, reconnecting...');
         this.amiConnected = false;
-        setTimeout(() => this.connectAMI(), 5000);
+        this.amiConnecting = false;
+        this.scheduleReconnect();
       });
     } catch (err) {
       this.logger.error(`AMI connect failed: ${err.message}`);
-      setTimeout(() => this.connectAMI(), 5000);
+      this.amiConnecting = false;
+      this.scheduleReconnect();
     }
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connectAMI();
+    }, 5000);
+  }
+
+  private clearReconnect() {
+    if (!this.reconnectTimer) return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
   }
 
   private login(user: string, secret: string) {
@@ -320,6 +345,13 @@ export class TelephonyService implements OnModuleInit {
     return this.sendAction({
       Action: 'QueueStatus',
       ...(queue ? { Queue: queue } : {}),
+    });
+  }
+
+  async command(command: string) {
+    return this.sendAction({
+      Action: 'Command',
+      Command: command,
     });
   }
 

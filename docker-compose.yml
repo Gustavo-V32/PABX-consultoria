@@ -53,9 +53,12 @@ services:
       REDIS_PORT: 6379
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secret}@redis:6379
       ASTERISK_HOST: asterisk
+      ASTERISK_AMI_ENABLED: "true"
+      ASTERISK_CONFIG_PATH: /app/asterisk-conf
     volumes:
       - uploads_data:/app/uploads
       - recordings_data:/app/recordings
+      - ./asterisk/conf:/app/asterisk-conf
     ports:
       - "3001:3001"
     networks:

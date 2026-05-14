@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Search, Plus, RefreshCw } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Edit2, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,18 @@ import { cn } from '@/lib/utils';
 type Column = {
   label: string;
   path: string;
-  type?: 'text' | 'badge' | 'boolean' | 'count';
+  type?: 'text' | 'badge' | 'boolean' | 'count' | 'connection-status';
+};
+
+type ResourceField = {
+  name: string;
+  label: string;
+  type?: 'text' | 'email' | 'password' | 'number' | 'boolean' | 'select' | 'textarea' | 'json';
+  required?: boolean;
+  options?: { label: string; value: string | number | boolean }[];
+  defaultValue?: any;
+  placeholder?: string;
+  createOnly?: boolean;
 };
 
 type ResourcePageProps = {
@@ -21,6 +32,7 @@ type ResourcePageProps = {
   description: string;
   endpoint: string;
   columns: Column[];
+  fields?: ResourceField[];
   createLabel?: string;
   emptyTitle: string;
   emptyDescription: string;
@@ -39,6 +51,10 @@ function normalizeRows(payload: any): any[] {
 function formatValue(row: any, column: Column) {
   const value = getValue(row, column.path);
 
+  if (column.type === 'connection-status') {
+    return getConnectionStatus(value).label;
+  }
+
   if (column.type === 'count') {
     return Array.isArray(value) ? value.length : value ?? 0;
   }
@@ -54,16 +70,91 @@ function formatValue(row: any, column: Column) {
   return String(value);
 }
 
+function getConnectionStatus(status: unknown) {
+  const normalized = String(status || '').toUpperCase();
+
+  if (normalized === 'REGISTERED') {
+    return {
+      label: 'Online',
+      className: 'text-emerald-500',
+      dotClassName: 'bg-emerald-500',
+    };
+  }
+
+  if (['UNREGISTERED', 'UNREACHABLE'].includes(normalized)) {
+    return {
+      label: 'Offline',
+      className: 'text-red-500',
+      dotClassName: 'bg-red-500',
+    };
+  }
+
+  if (normalized === 'DISABLED') {
+    return {
+      label: 'Desabilitado',
+      className: 'text-muted-foreground',
+      dotClassName: 'bg-muted-foreground',
+    };
+  }
+
+  return {
+    label: 'Desconhecido',
+    className: 'text-muted-foreground',
+    dotClassName: 'bg-muted-foreground',
+  };
+}
+
+function setValue(target: Record<string, any>, path: string, value: any) {
+  const keys = path.split('.');
+  let current = target;
+  keys.slice(0, -1).forEach((key) => {
+    current[key] = current[key] || {};
+    current = current[key];
+  });
+  current[keys[keys.length - 1]] = value;
+}
+
+function buildInitialValues(fields: ResourceField[], row?: any) {
+  return fields.reduce((acc, field) => {
+    const value = row ? getValue(row, field.name) : field.defaultValue;
+    setValue(acc, field.name, field.type === 'json'
+      ? JSON.stringify(value ?? field.defaultValue ?? {}, null, 2)
+      : value ?? '');
+    return acc;
+  }, {} as Record<string, any>);
+}
+
+function parseValues(fields: ResourceField[], values: Record<string, any>, mode: 'create' | 'edit') {
+  const payload: Record<string, any> = {};
+  for (const field of fields) {
+    if (mode === 'edit' && field.createOnly) continue;
+    const raw = getValue(values, field.name);
+    if (raw === '' || raw === undefined) continue;
+
+    let value: any = raw;
+    if (field.type === 'number') value = Number(raw);
+    if (field.type === 'boolean') value = Boolean(raw);
+    if (field.type === 'json') value = JSON.parse(raw);
+    setValue(payload, field.name, value);
+  }
+  return payload;
+}
+
 export function ResourcePage({
   title,
   description,
   endpoint,
   columns,
+  fields = [],
   createLabel,
   emptyTitle,
   emptyDescription,
 }: ResourcePageProps) {
   const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<any | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, any>>({});
+  const [formError, setFormError] = useState('');
+  const queryClient = useQueryClient();
   const { data = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['resource', endpoint],
     queryFn: () => api.get(endpoint).then((response) => normalizeRows(response.data.data)),
@@ -78,6 +169,50 @@ export function ResourcePage({
     );
   }, [columns, data, search]);
 
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const mode = editing?.id ? 'edit' : 'create';
+      const payload = parseValues(fields, formValues, mode);
+      if (mode === 'edit') return api.patch(`${endpoint}/${editing.id}`, payload);
+      return api.post(endpoint, payload);
+    },
+    onSuccess: async () => {
+      setEditing(null);
+      setFormValues({});
+      setFormError('');
+      await queryClient.invalidateQueries({ queryKey: ['resource', endpoint] });
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.message || error.response?.data?.error || error.message;
+      setFormError(Array.isArray(message) ? message.join(', ') : message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`${endpoint}/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resource', endpoint] }),
+  });
+
+  const openCreate = () => {
+    setEditing({});
+    setFormValues(buildInitialValues(fields));
+    setFormError('');
+  };
+
+  const openEdit = (row: any) => {
+    setEditing(row);
+    setFormValues(buildInitialValues(fields, row));
+    setFormError('');
+  };
+
+  const updateField = (path: string, value: any) => {
+    setFormValues((current) => {
+      const next = structuredClone(current);
+      setValue(next, path, value);
+      return next;
+    });
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -91,7 +226,7 @@ export function ResourcePage({
             Atualizar
           </Button>
           {createLabel && (
-            <Button size="sm" className="gap-2">
+            <Button size="sm" className="gap-2" onClick={openCreate} disabled={!fields.length}>
               <Plus className="h-4 w-4" />
               {createLabel}
             </Button>
@@ -133,6 +268,7 @@ export function ResourcePage({
                         {column.label}
                       </th>
                     ))}
+                    {fields.length > 0 && <th className="px-4 py-3 text-right font-medium">Acoes</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -142,7 +278,9 @@ export function ResourcePage({
                         const value = formatValue(row, column);
                         return (
                           <td key={column.path} className="px-4 py-3">
-                            {column.type === 'badge' || column.type === 'boolean' ? (
+                            {column.type === 'connection-status' ? (
+                              <ConnectionStatus value={getValue(row, column.path)} />
+                            ) : column.type === 'badge' || column.type === 'boolean' ? (
                               <Badge variant={value === 'Inativo' ? 'secondary' : 'outline'}>{value}</Badge>
                             ) : (
                               <span className="text-foreground">{value}</span>
@@ -150,6 +288,24 @@ export function ResourcePage({
                           </td>
                         );
                       })}
+                      {fields.length > 0 && (
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              if (window.confirm('Deseja excluir ou inativar este registro?')) {
+                                deleteMutation.mutate(row.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -158,6 +314,98 @@ export function ResourcePage({
           )}
         </CardContent>
       </Card>
+
+      {editing && fields.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-md border bg-background shadow-lg">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold">{editing.id ? 'Editar registro' : createLabel}</h2>
+                <p className="text-xs text-muted-foreground">{title}</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+              {formError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {formError}
+                </div>
+              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                {fields.filter((field) => !(editing.id && field.createOnly)).map((field) => {
+                  const value = getValue(formValues, field.name);
+                  return (
+                    <label key={field.name} className={cn('space-y-1.5', ['textarea', 'json'].includes(field.type || '') && 'md:col-span-2')}>
+                      <span className="text-sm font-medium">
+                        {field.label}{field.required ? ' *' : ''}
+                      </span>
+                      {field.type === 'select' ? (
+                        <select
+                          value={value}
+                          onChange={(event) => updateField(field.name, event.target.value)}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="">Selecione</option>
+                          {field.options?.map((option) => (
+                            <option key={String(option.value)} value={String(option.value)}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.type === 'boolean' ? (
+                        <select
+                          value={String(value)}
+                          onChange={(event) => updateField(field.name, event.target.value === 'true')}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="true">Sim</option>
+                          <option value="false">Nao</option>
+                        </select>
+                      ) : field.type === 'textarea' || field.type === 'json' ? (
+                        <textarea
+                          value={value}
+                          onChange={(event) => updateField(field.name, event.target.value)}
+                          placeholder={field.placeholder}
+                          rows={field.type === 'json' ? 8 : 4}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        />
+                      ) : (
+                        <Input
+                          value={value}
+                          type={field.type || 'text'}
+                          required={field.required}
+                          placeholder={field.placeholder}
+                          onChange={(event) => updateField(field.name, event.target.value)}
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4">
+              <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+              <Button className="gap-2" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                <Save className="h-4 w-4" />
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ConnectionStatus({ value }: { value: unknown }) {
+  const status = getConnectionStatus(value);
+
+  return (
+    <span className={cn('inline-flex items-center gap-2 font-medium', status.className)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', status.dotClassName)} />
+      {status.label}
+    </span>
   );
 }

@@ -1,0 +1,1 @@
+ALTER TYPE "ConversationChannel" ADD VALUE IF NOT EXISTS 'TELEGRAM';

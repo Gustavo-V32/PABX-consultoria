@@ -17,6 +17,19 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PbxService } from './pbx.service';
+import {
+  CreateCallRouteDto,
+  CreateIvrDto,
+  CreateRecordingDto,
+  CreateRingGroupDto,
+  CreateRingGroupMemberDto,
+  IvrOptionDto,
+  RegisterSoftphoneSessionDto,
+  SoftphoneHeartbeatDto,
+  UpdateCallRouteDto,
+  UpdateIvrDto,
+  UpdateRingGroupDto,
+} from './dto/pbx.dto';
 
 @ApiTags('pbx')
 @Controller('pbx')
@@ -24,6 +37,28 @@ import { PbxService } from './pbx.service';
 @ApiBearerAuth()
 export class PbxController {
   constructor(private service: PbxService) {}
+
+  @Get('readiness')
+  @ApiOperation({ summary: 'Diagnostico operacional de PABX, URA e numeros digitais' })
+  readiness(@CurrentUser('organizationId') orgId: string) {
+    return this.service.getReadiness(orgId);
+  }
+
+  @Get('asterisk/preview')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Pre-visualizar configuracao Asterisk gerada pelo PABX' })
+  previewAsteriskConfig(@CurrentUser('organizationId') orgId: string) {
+    return this.service.previewAsteriskConfig(orgId);
+  }
+
+  @Post('asterisk/apply')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Gerar arquivos Asterisk e aplicar reload controlado' })
+  applyAsteriskConfig(@CurrentUser('organizationId') orgId: string) {
+    return this.service.applyAsteriskConfig(orgId);
+  }
 
   @Get('ivrs')
   listIvrs(@CurrentUser('organizationId') orgId: string) {
@@ -33,14 +68,14 @@ export class PbxController {
   @Post('ivrs')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  createIvr(@CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  createIvr(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateIvrDto) {
     return this.service.createIvr(orgId, dto);
   }
 
   @Patch('ivrs/:id')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  updateIvr(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  updateIvr(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: UpdateIvrDto) {
     return this.service.updateIvr(id, orgId, dto);
   }
 
@@ -55,7 +90,7 @@ export class PbxController {
   @Post('ivrs/:id/options')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  addIvrOption(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  addIvrOption(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: IvrOptionDto) {
     return this.service.addIvrOption(id, orgId, dto);
   }
 
@@ -66,7 +101,7 @@ export class PbxController {
     @Param('id') id: string,
     @Param('optionId') optionId: string,
     @CurrentUser('organizationId') orgId: string,
-    @Body() dto: any,
+    @Body() dto: IvrOptionDto,
   ) {
     return this.service.updateIvrOption(id, optionId, orgId, dto);
   }
@@ -92,14 +127,14 @@ export class PbxController {
   @Post('routes')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  createRoute(@CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  createRoute(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateCallRouteDto) {
     return this.service.createRoute(orgId, dto);
   }
 
   @Patch('routes/:id')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  updateRoute(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  updateRoute(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: UpdateCallRouteDto) {
     return this.service.updateRoute(id, orgId, dto);
   }
 
@@ -119,21 +154,25 @@ export class PbxController {
   @Post('ring-groups')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  createRingGroup(@CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  createRingGroup(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateRingGroupDto) {
     return this.service.createRingGroup(orgId, dto);
   }
 
   @Patch('ring-groups/:id')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  updateRingGroup(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  updateRingGroup(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: UpdateRingGroupDto) {
     return this.service.updateRingGroup(id, orgId, dto);
   }
 
   @Post('ring-groups/:id/members')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  addRingGroupMember(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  addRingGroupMember(
+    @Param('id') id: string,
+    @CurrentUser('organizationId') orgId: string,
+    @Body() dto: CreateRingGroupMemberDto,
+  ) {
     return this.service.addRingGroupMember(id, orgId, dto);
   }
 
@@ -165,7 +204,7 @@ export class PbxController {
   @Post('recordings')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  createRecording(@CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  createRecording(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateRecordingDto) {
     return this.service.createRecording(orgId, dto);
   }
 
@@ -178,7 +217,7 @@ export class PbxController {
   registerSoftphoneSession(
     @CurrentUser('organizationId') orgId: string,
     @CurrentUser('sub') userId: string,
-    @Body() dto: any,
+    @Body() dto: RegisterSoftphoneSessionDto,
   ) {
     return this.service.registerSoftphoneSession(orgId, userId, dto);
   }
@@ -187,7 +226,7 @@ export class PbxController {
   heartbeatSoftphoneSession(
     @Param('sessionId') sessionId: string,
     @CurrentUser('organizationId') orgId: string,
-    @Body() dto: any,
+    @Body() dto: SoftphoneHeartbeatDto,
   ) {
     return this.service.heartbeatSoftphoneSession(sessionId, orgId, dto);
   }

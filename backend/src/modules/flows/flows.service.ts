@@ -1,9 +1,42 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class FlowsService {
   constructor(private prisma: PrismaService) {}
+
+  blueprints() {
+    return [
+      {
+        key: 'customer-identification',
+        name: 'Identificacao e triagem',
+        description: 'Coleta documento, identifica cliente e encaminha para fila conforme necessidade.',
+        channel: 'WHATSAPP',
+        nodes: 6,
+      },
+      {
+        key: 'ixc-support',
+        name: 'Suporte com consulta IXC',
+        description: 'Solicita CPF/CNPJ, chama integracao IXC e personaliza resposta antes do transbordo.',
+        channel: 'WHATSAPP',
+        nodes: 7,
+      },
+      {
+        key: 'telegram-entry',
+        name: 'Entrada Telegram',
+        description: 'Recebe cliente do Telegram, qualifica assunto e direciona atendimento humano.',
+        channel: 'TELEGRAM',
+        nodes: 5,
+      },
+    ];
+  }
+
+  async createFromBlueprint(organizationId: string, key: string, dto: any = {}) {
+    const blueprint = this.buildBlueprint(key, dto);
+    if (!blueprint) throw new NotFoundException('Modelo de fluxo nao encontrado');
+    return this.create(organizationId, blueprint);
+  }
 
   findAll(organizationId: string, includeInactive = false) {
     return this.prisma.communicationFlow.findMany({
@@ -185,5 +218,120 @@ export class FlowsService {
     const variables = await this.variablesForContact(organizationId, dto.contactId, dto.agentId);
     const rendered = dto.template.replace(/{{\s*([\w.-]+)\s*}}/g, (_, key) => variables[key] ?? '');
     return { variables, rendered };
+  }
+
+  private buildBlueprint(key: string, dto: any) {
+    const name = dto.name || this.blueprints().find((blueprint) => blueprint.key === key)?.name;
+    const base = {
+      name,
+      description: dto.description,
+      status: 'DRAFT',
+      version: 1,
+      isActive: true,
+    };
+
+    const blueprints: Record<string, any> = {
+      'customer-identification': {
+        ...base,
+        channel: dto.channel || 'WHATSAPP',
+        startNodeId: 'start',
+        nodes: [
+          this.node('start', 'START', 'Inicio', 0, { trigger: 'MESSAGE_RECEIVED' }),
+          this.node('welcome', 'MESSAGE', 'Saudacao', 1, {
+            text: 'Ola, {{primeiro_nome}}. Para agilizar seu atendimento, informe CPF/CNPJ ou protocolo.',
+          }),
+          this.node('document', 'CAPTURE_DOCUMENT', 'Capturar documento', 2, { variable: 'documento_cliente' }),
+          this.node('menu', 'NUMERIC_MENU', 'Menu principal', 3, {
+            text: 'Digite 1 para financeiro, 2 para suporte tecnico ou 3 para comercial.',
+            options: { '1': 'financeiro', '2': 'suporte', '3': 'comercial' },
+          }),
+          this.node('queue', 'TRANSFER_QUEUE', 'Encaminhar fila', 4, { queueMapVariable: 'opcao_menu' }),
+          this.node('end', 'END', 'Fim', 5, { reason: 'transferred' }),
+        ],
+        connections: [
+          this.connection('start', 'welcome'),
+          this.connection('welcome', 'document'),
+          this.connection('document', 'menu'),
+          this.connection('menu', 'queue'),
+          this.connection('queue', 'end'),
+        ],
+      },
+      'ixc-support': {
+        ...base,
+        channel: dto.channel || 'WHATSAPP',
+        startNodeId: 'start',
+        nodes: [
+          this.node('start', 'START', 'Inicio', 0, { trigger: 'MESSAGE_RECEIVED' }),
+          this.node('document', 'CAPTURE_DOCUMENT', 'Documento do assinante', 1, { variable: 'documento_cliente' }),
+          this.node('ixc', 'WEBHOOK', 'Consultar IXC', 2, {
+            integrationType: 'IXC',
+            operation: 'customers.search',
+            query: '{{documento_cliente}}',
+            saveAs: 'cliente_ixc',
+          }),
+          this.node('condition', 'CONDITION', 'Cliente encontrado?', 3, {
+            expression: 'cliente_ixc.records.length > 0',
+          }),
+          this.node('message', 'MESSAGE', 'Resposta personalizada', 4, {
+            text: 'Localizei seu cadastro, {{primeiro_nome}}. Vou encaminhar seu atendimento com o historico em tela.',
+          }),
+          this.node('queue', 'TRANSFER_QUEUE', 'Fila suporte', 5, { queueName: dto.queueName || 'Suporte' }),
+          this.node('end', 'END', 'Fim', 6, { reason: 'transferred' }),
+        ],
+        connections: [
+          this.connection('start', 'document'),
+          this.connection('document', 'ixc'),
+          this.connection('ixc', 'condition'),
+          this.connection('condition', 'message', 'true'),
+          this.connection('message', 'queue'),
+          this.connection('queue', 'end'),
+        ],
+      },
+      'telegram-entry': {
+        ...base,
+        channel: 'TELEGRAM',
+        startNodeId: 'start',
+        nodes: [
+          this.node('start', 'START', 'Mensagem Telegram', 0, { trigger: 'MESSAGE_RECEIVED' }),
+          this.node('welcome', 'MESSAGE', 'Boas-vindas', 1, {
+            text: 'Recebemos sua mensagem pelo Telegram. Escolha o assunto para continuar.',
+          }),
+          this.node('menu', 'NUMERIC_MENU', 'Assunto', 2, {
+            text: '1 Financeiro\n2 Suporte\n3 Comercial',
+            options: { '1': 'financeiro', '2': 'suporte', '3': 'comercial' },
+          }),
+          this.node('queue', 'TRANSFER_QUEUE', 'Direcionar atendimento', 3, { queueMapVariable: 'opcao_menu' }),
+          this.node('end', 'END', 'Fim', 4, { reason: 'transferred' }),
+        ],
+        connections: [
+          this.connection('start', 'welcome'),
+          this.connection('welcome', 'menu'),
+          this.connection('menu', 'queue'),
+          this.connection('queue', 'end'),
+        ],
+      },
+    };
+
+    return blueprints[key];
+  }
+
+  private node(id: string, type: string, label: string, sortOrder: number, config: Record<string, unknown>) {
+    return {
+      id,
+      type,
+      label,
+      sortOrder,
+      position: { x: 120 + sortOrder * 220, y: sortOrder % 2 === 0 ? 120 : 260 } as Prisma.InputJsonValue,
+      config: config as Prisma.InputJsonValue,
+    };
+  }
+
+  private connection(sourceNodeId: string, targetNodeId: string, sourceHandle?: string) {
+    return {
+      sourceNodeId,
+      targetNodeId,
+      sourceHandle,
+      condition: (sourceHandle ? { value: sourceHandle } : {}) as Prisma.InputJsonValue,
+    };
   }
 }

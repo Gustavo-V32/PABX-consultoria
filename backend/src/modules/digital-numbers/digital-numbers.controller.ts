@@ -17,6 +17,11 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DigitalNumbersService } from './digital-numbers.service';
+import {
+  CreateDigitalNumberDto,
+  RegisterDigitalNumberTestDto,
+  UpdateDigitalNumberDto,
+} from './dto/digital-number.dto';
 
 @ApiTags('digital-numbers')
 @Controller('digital-numbers')
@@ -39,14 +44,14 @@ export class DigitalNumbersController {
   @Post()
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  create(@CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  create(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateDigitalNumberDto) {
     return this.service.create(orgId, dto);
   }
 
   @Patch(':id')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
-  update(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  update(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: UpdateDigitalNumberDto) {
     return this.service.update(id, orgId, dto);
   }
 
@@ -54,7 +59,7 @@ export class DigitalNumbersController {
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
   @UseGuards(RolesGuard)
   @ApiOperation({ summary: 'Registrar teste de conexao do numero digital' })
-  test(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: any) {
+  test(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: RegisterDigitalNumberTestDto) {
     return this.service.registerTest(id, orgId, dto);
   }
 

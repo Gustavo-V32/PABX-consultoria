@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Body, Param, Query, UseGuards,
+  Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post, Body, Param, Query, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TelephonyService } from './telephony.service';
@@ -8,8 +8,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { IsString, IsOptional, IsInt, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/swagger';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 class OriginateCallDto {
   @IsString() from: string;
@@ -22,16 +22,27 @@ class CreateExtensionDto {
   @IsString() name: string;
   @IsString() secret: string;
   @IsOptional() @IsString() callerId?: string;
+  @IsOptional() @IsString() context?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(10) maxContacts?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
+
+class UpdateExtensionDto extends PartialType(CreateExtensionDto) {}
 
 class CreateTrunkDto {
   @IsString() name: string;
   @IsString() provider: string;
   @IsString() host: string;
-  @IsOptional() @IsInt() port?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(65535) port?: number;
   @IsOptional() @IsString() username?: string;
   @IsOptional() @IsString() secret?: string;
+  @IsOptional() @IsString() fromUser?: string;
+  @IsOptional() @IsString() fromDomain?: string;
+  @IsOptional() @IsString() context?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
+
+class UpdateTrunkDto extends PartialType(CreateTrunkDto) {}
 
 @ApiTags('telephony')
 @Controller('telephony')
@@ -101,7 +112,7 @@ export class TelephonyController {
   @ApiOperation({ summary: 'Criar ramal' })
   createExtension(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateExtensionDto) {
     return this.prisma.extension.create({
-      data: { organizationId: orgId, ...dto },
+      data: { organizationId: orgId, context: 'from-internal', maxContacts: 1, isActive: true, ...dto },
       select: {
         id: true,
         number: true,
@@ -115,6 +126,33 @@ export class TelephonyController {
     });
   }
 
+  @Patch('extensions/:id')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Atualizar ramal' })
+  updateExtension(
+    @CurrentUser('organizationId') orgId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateExtensionDto,
+  ) {
+    return this.prisma.extension.updateMany({
+      where: { id, organizationId: orgId },
+      data: dto,
+    });
+  }
+
+  @Delete('extensions/:id')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Inativar ramal' })
+  async deleteExtension(@CurrentUser('organizationId') orgId: string, @Param('id') id: string) {
+    await this.prisma.extension.updateMany({
+      where: { id, organizationId: orgId },
+      data: { isActive: false },
+    });
+  }
+
   // Trunks CRUD
   @Get('trunks')
   @Roles('ADMIN', 'TELEPHONY_OPERATOR')
@@ -125,7 +163,7 @@ export class TelephonyController {
       where: { organizationId: orgId },
       select: {
         id: true, name: true, provider: true, host: true,
-        port: true, username: true, isActive: true, createdAt: true,
+        port: true, username: true, fromUser: true, fromDomain: true, context: true, isActive: true, createdAt: true,
       },
     });
   }
@@ -136,7 +174,7 @@ export class TelephonyController {
   @ApiOperation({ summary: 'Criar tronco SIP' })
   createTrunk(@CurrentUser('organizationId') orgId: string, @Body() dto: CreateTrunkDto) {
     return this.prisma.sipTrunk.create({
-      data: { organizationId: orgId, ...dto },
+      data: { organizationId: orgId, port: 5060, context: 'from-trunk', isActive: true, ...dto },
       select: {
         id: true,
         name: true,
@@ -144,9 +182,39 @@ export class TelephonyController {
         host: true,
         port: true,
         username: true,
+        fromUser: true,
+        fromDomain: true,
+        context: true,
         isActive: true,
         createdAt: true,
       },
+    });
+  }
+
+  @Patch('trunks/:id')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Atualizar tronco SIP' })
+  updateTrunk(
+    @CurrentUser('organizationId') orgId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateTrunkDto,
+  ) {
+    return this.prisma.sipTrunk.updateMany({
+      where: { id, organizationId: orgId },
+      data: dto,
+    });
+  }
+
+  @Delete('trunks/:id')
+  @Roles('ADMIN', 'TELEPHONY_OPERATOR')
+  @UseGuards(RolesGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Inativar tronco SIP' })
+  async deleteTrunk(@CurrentUser('organizationId') orgId: string, @Param('id') id: string) {
+    await this.prisma.sipTrunk.updateMany({
+      where: { id, organizationId: orgId },
+      data: { isActive: false },
     });
   }
 

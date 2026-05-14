@@ -4,16 +4,20 @@ export default function EtiquetasPage() {
   return (
     <ResourcePage
       title="Etiquetas"
-      description="Classificação de contatos e conversas."
+      description="Classificacao de contatos e conversas."
       endpoint="/tags"
       createLabel="Nova Etiqueta"
       emptyTitle="Nenhuma etiqueta criada"
-      emptyDescription="Crie etiquetas para segmentação operacional e relatórios."
+      emptyDescription="Crie etiquetas para segmentacao operacional e relatorios."
       columns={[
         { label: 'Nome', path: 'name' },
         { label: 'Cor', path: 'color' },
         { label: 'Contatos', path: '_count.contacts' },
         { label: 'Conversas', path: '_count.conversations' },
+      ]}
+      fields={[
+        { name: 'name', label: 'Nome', required: true },
+        { name: 'color', label: 'Cor', defaultValue: '#3b82f6' },
       ]}
     />
   );

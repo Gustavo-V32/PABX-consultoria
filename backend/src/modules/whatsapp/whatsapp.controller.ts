@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query,
+  Controller, Get, Post, Delete, Body, Param, Query, Patch,
   UseGuards, HttpCode, HttpStatus, NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -78,6 +78,15 @@ export class WhatsappController {
   async deleteNumber(@Param('id') id: string, @CurrentUser('organizationId') orgId: string) {
     await this.prisma.whatsappNumber.deleteMany({
       where: { id, organizationId: orgId },
+    });
+  }
+
+  @Patch('numbers/:id')
+  @ApiOperation({ summary: 'Atualizar numero WhatsApp' })
+  async updateNumber(@Param('id') id: string, @CurrentUser('organizationId') orgId: string, @Body() dto: Partial<CreateNumberDto>) {
+    return this.prisma.whatsappNumber.updateMany({
+      where: { id, organizationId: orgId },
+      data: dto,
     });
   }
 

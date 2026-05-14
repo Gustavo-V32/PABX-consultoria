@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  CreateDigitalNumberDto,
+  RegisterDigitalNumberTestDto,
+  UpdateDigitalNumberDto,
+} from './dto/digital-number.dto';
 
 @Injectable()
 export class DigitalNumbersService {
@@ -53,7 +59,8 @@ export class DigitalNumbersService {
     return number;
   }
 
-  create(organizationId: string, dto: any) {
+  create(organizationId: string, dto: CreateDigitalNumberDto) {
+    this.validatePorts(dto);
     return this.prisma.digitalNumber.create({
       data: {
         organizationId,
@@ -75,17 +82,18 @@ export class DigitalNumbersService {
         notes: dto.notes,
         status: dto.status || 'UNREGISTERED',
         registrationStatus: dto.registrationStatus,
-        logs: dto.logs || [],
+        logs: (dto.logs || []) as Prisma.InputJsonValue,
       },
       select: this.safeSelect,
     });
   }
 
-  async update(id: string, organizationId: string, dto: any) {
-    await this.findOne(id, organizationId);
+  async update(id: string, organizationId: string, dto: UpdateDigitalNumberDto) {
+    const current = await this.findOne(id, organizationId);
+    this.validatePorts({ ...dto, rtpPortStart: dto.rtpPortStart ?? current.rtpPortStart, rtpPortEnd: dto.rtpPortEnd ?? current.rtpPortEnd });
     return this.prisma.digitalNumber.update({
       where: { id },
-      data: dto,
+      data: dto as Prisma.DigitalNumberUncheckedUpdateInput,
       select: this.safeSelect,
     });
   }
@@ -99,15 +107,16 @@ export class DigitalNumbersService {
     });
   }
 
-  async registerTest(id: string, organizationId: string, result: any) {
+  async registerTest(id: string, organizationId: string, result: RegisterDigitalNumberTestDto) {
     const number = await this.findOne(id, organizationId);
-    const logs = Array.isArray(number.logs) ? number.logs : [];
-    logs.unshift({
+    const logs = Array.isArray(number.logs) ? ([...number.logs] as Prisma.JsonArray) : [];
+    const logEntry: Prisma.JsonObject = {
       at: new Date().toISOString(),
       status: result.status || 'TESTING',
       message: result.message || 'Teste registrado manualmente',
-      details: result.details || {},
-    });
+      details: (result.details || {}) as Prisma.JsonObject,
+    };
+    logs.unshift(logEntry);
 
     return this.prisma.digitalNumber.update({
       where: { id },
@@ -119,5 +128,19 @@ export class DigitalNumbersService {
       },
       select: this.safeSelect,
     });
+  }
+
+  private validatePorts(dto: Partial<CreateDigitalNumberDto>) {
+    const rtpPortStart = dto.rtpPortStart ?? 10000;
+    const rtpPortEnd = dto.rtpPortEnd ?? 10200;
+
+    if (rtpPortStart >= rtpPortEnd) {
+      throw new BadRequestException('Porta RTP inicial deve ser menor que a porta RTP final');
+    }
+
+    const signalingPorts = [dto.sipPort ?? 5060, dto.udpPort ?? 5060, dto.tlsPort ?? 5061, dto.amiPort ?? 5038];
+    if (signalingPorts.some((port) => port >= rtpPortStart && port <= rtpPortEnd)) {
+      throw new BadRequestException('Faixa RTP nao deve sobrepor portas SIP, TLS, UDP ou AMI');
+    }
   }
 }

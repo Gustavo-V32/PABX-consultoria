@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Query, Res, HttpCode, Param, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Res, HttpCode, Param, Logger, Headers } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Response } from 'express';
@@ -11,6 +12,7 @@ export class WebhooksController {
 
   constructor(
     private whatsapp: WhatsappService,
+    private integrations: IntegrationsService,
     private config: ConfigService,
     private prisma: PrismaService,
   ) {}
@@ -57,8 +59,27 @@ export class WebhooksController {
   @Public()
   @Post('integration/:integrationId')
   @HttpCode(200)
-  async receiveIntegration(@Param('integrationId') id: string, @Body() body: any) {
+  async receiveIntegration(
+    @Param('integrationId') id: string,
+    @Body() body: any,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+  ) {
     this.logger.log(`Integration webhook received: ${id}`);
-    return { received: true };
+    const integration = await this.integrations.findPublicIntegration(id);
+    if (integration.type === 'TELEGRAM') {
+      return this.integrations.processTelegramWebhook(id, body, headers);
+    }
+    return this.integrations.recordWebhook(integration, body, body?.event || body?.type);
+  }
+
+  @Public()
+  @Post('telegram/:integrationId')
+  @HttpCode(200)
+  async receiveTelegram(
+    @Param('integrationId') id: string,
+    @Body() body: any,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+  ) {
+    return this.integrations.processTelegramWebhook(id, body, headers);
   }
 }

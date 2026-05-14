@@ -161,14 +161,14 @@ export class DashboardService {
 
     const conversations = await this.prisma.$queryRaw<any[]>`
       SELECT
-        DATE(created_at) as date,
+        DATE("createdAt") as date,
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status IN ('RESOLVED', 'CLOSED')) as resolved,
         channel
       FROM conversations
-      WHERE organization_id = ${organizationId}
-        AND created_at >= ${start}
-      GROUP BY DATE(created_at), channel
+      WHERE "organizationId" = ${organizationId}
+        AND "createdAt" >= ${start}
+      GROUP BY DATE("createdAt"), channel
       ORDER BY date ASC
     `;
 
@@ -180,15 +180,15 @@ export class DashboardService {
 
     const calls = await this.prisma.$queryRaw<any[]>`
       SELECT
-        DATE(start_time) as date,
+        DATE("startTime") as date,
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'COMPLETED') as answered,
         COUNT(*) FILTER (WHERE status = 'MISSED') as missed,
         ROUND(AVG(duration)) as avg_duration
       FROM calls
-      WHERE organization_id = ${organizationId}
-        AND start_time >= ${start}
-      GROUP BY DATE(start_time)
+      WHERE "organizationId" = ${organizationId}
+        AND "startTime" >= ${start}
+      GROUP BY DATE("startTime")
       ORDER BY date ASC
     `;
 

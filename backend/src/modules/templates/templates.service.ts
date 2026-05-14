@@ -1,25 +1,68 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TemplateCategory, TemplateStatus } from '@prisma/client';
+import { Allow, IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class CreateTemplateDto {
+  @IsString()
   name: string;
+
+  @IsOptional()
+  @IsString()
   language?: string;
+
+  @IsEnum(TemplateCategory)
   category: TemplateCategory;
+
+  @IsOptional()
+  @IsEnum(TemplateStatus)
   status?: TemplateStatus;
+
+  @IsOptional()
+  @IsString()
   whatsappNumberId?: string;
+
+  @Allow()
   components: any;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   variables?: string[];
 }
 
 export class UpdateTemplateDto {
+  @IsOptional()
+  @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
   language?: string;
+
+  @IsOptional()
+  @IsEnum(TemplateCategory)
   category?: TemplateCategory;
+
+  @IsOptional()
+  @IsEnum(TemplateStatus)
   status?: TemplateStatus;
+
+  @IsOptional()
+  @IsString()
   whatsappNumberId?: string | null;
+
+  @IsOptional()
+  @Allow()
   components?: any;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   variables?: string[];
+
+  @IsOptional()
+  @IsString()
   rejectedReason?: string | null;
 }
 

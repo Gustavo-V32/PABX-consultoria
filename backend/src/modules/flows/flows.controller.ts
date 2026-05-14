@@ -31,6 +31,24 @@ export class FlowsController {
     return this.service.findAll(orgId, includeInactive === 'true');
   }
 
+  @Get('blueprints')
+  @ApiOperation({ summary: 'Listar modelos prontos de fluxos de atendimento' })
+  blueprints() {
+    return this.service.blueprints();
+  }
+
+  @Post('blueprints/:key')
+  @Roles('ADMIN', 'SUPERVISOR')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Criar fluxo a partir de modelo pronto' })
+  createFromBlueprint(
+    @Param('key') key: string,
+    @CurrentUser('organizationId') orgId: string,
+    @Body() dto: any,
+  ) {
+    return this.service.createFromBlueprint(orgId, key, dto);
+  }
+
   @Post('preview')
   @ApiOperation({ summary: 'Previsualizar mensagem com variaveis dinamicas' })
   preview(@CurrentUser('organizationId') orgId: string, @CurrentUser('sub') userId: string, @Body() dto: any) {

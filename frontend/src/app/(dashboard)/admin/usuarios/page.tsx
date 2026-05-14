@@ -16,6 +16,28 @@ export default function UsuariosPage() {
         { label: 'Status', path: 'status', type: 'badge' },
         { label: 'Ativo', path: 'isActive', type: 'boolean' },
       ]}
+      fields={[
+        { name: 'name', label: 'Nome', required: true },
+        { name: 'email', label: 'Email', type: 'email', required: true, createOnly: true },
+        { name: 'password', label: 'Senha', type: 'password', required: true, createOnly: true },
+        {
+          name: 'role',
+          label: 'Perfil',
+          type: 'select',
+          required: true,
+          defaultValue: 'AGENT',
+          options: [
+            { label: 'Administrador', value: 'ADMIN' },
+            { label: 'Supervisor', value: 'SUPERVISOR' },
+            { label: 'Agente', value: 'AGENT' },
+            { label: 'Operador telefonia', value: 'TELEPHONY_OPERATOR' },
+            { label: 'Analista', value: 'ANALYST' },
+            { label: 'Visualizador', value: 'VIEWER' },
+          ],
+        },
+        { name: 'maxChats', label: 'Max. atendimentos', type: 'number', defaultValue: 5 },
+        { name: 'isActive', label: 'Ativo', type: 'boolean', defaultValue: true },
+      ]}
     />
   );
 }

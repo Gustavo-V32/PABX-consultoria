@@ -1,24 +1,65 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PartialType } from '@nestjs/swagger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueueStrategy } from '@prisma/client';
+import { Allow, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateQueueDto {
+  @IsString()
   name: string;
-  description?: string;
-  sectorId?: string;
-  strategy?: QueueStrategy;
-  maxWaitTime?: number;
-  maxQueueSize?: number;
-  greetingMessage?: string;
-  waitMessage?: string;
-  wrapUpTime?: number;
-  autoAssign?: boolean;
-  settings?: any;
-}
 
-export class UpdateQueueDto extends CreateQueueDto {
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  sectorId?: string;
+
+  @IsOptional()
+  @IsEnum(QueueStrategy)
+  strategy?: QueueStrategy;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(86400)
+  maxWaitTime?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  maxQueueSize?: number;
+
+  @IsOptional()
+  @IsString()
+  greetingMessage?: string;
+
+  @IsOptional()
+  @IsString()
+  waitMessage?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(3600)
+  wrapUpTime?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  autoAssign?: boolean;
+
+  @IsOptional()
+  @Allow()
+  settings?: any;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
+
+export class UpdateQueueDto extends PartialType(CreateQueueDto) {}
 
 @Injectable()
 export class QueuesService {

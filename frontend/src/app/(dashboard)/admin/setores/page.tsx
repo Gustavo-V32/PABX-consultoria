@@ -4,16 +4,22 @@ export default function SetoresPage() {
   return (
     <ResourcePage
       title="Setores"
-      description="Áreas responsáveis por filas, agentes e atendimentos."
+      description="Areas responsaveis por filas, agentes e atendimentos."
       endpoint="/sectors"
       createLabel="Novo Setor"
       emptyTitle="Nenhum setor ativo"
-      emptyDescription="Crie setores para segmentar operação e relatórios."
+      emptyDescription="Crie setores para segmentar operacao e relatorios."
       columns={[
         { label: 'Nome', path: 'name' },
-        { label: 'Descrição', path: 'description' },
+        { label: 'Descricao', path: 'description' },
         { label: 'Supervisores', path: 'supervisors', type: 'count' },
         { label: 'Ativo', path: 'isActive', type: 'boolean' },
+      ]}
+      fields={[
+        { name: 'name', label: 'Nome', required: true },
+        { name: 'description', label: 'Descricao', type: 'textarea' },
+        { name: 'color', label: 'Cor', defaultValue: '#3b82f6' },
+        { name: 'isActive', label: 'Ativo', type: 'boolean', defaultValue: true },
       ]}
     />
   );
